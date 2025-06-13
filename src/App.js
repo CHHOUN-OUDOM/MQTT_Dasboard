@@ -14,7 +14,8 @@ import {
   FaTimesCircle,
 } from "react-icons/fa";
 
-const SOCKET_URL = "http://localhost:4000"; // your proxy address
+// Use env var (set locally in .env.development, and in Vercel settings)
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL;
 
 // Icons for each sensor key
 const ICON_MAP = {
@@ -29,12 +30,24 @@ export default function App() {
 
   // Receive MQTT messages via backend proxy
   useEffect(() => {
-    const socket = io(SOCKET_URL);
+    console.log("🔗 Connecting to Socket.IO at", SOCKET_URL);
+    const socket = io(SOCKET_URL, { transports: ["websocket"] });
+
+    socket.on("connect", () => {
+      console.log("✅ Socket connected, id:", socket.id);
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("🚨 Socket connect error:", err);
+    });
+
     socket.on("mqtt_message", ({ message }) => {
+      console.log("📥 mqtt_message:", message);
       let payload;
       try {
         payload = JSON.parse(message).payload;
       } catch {
+        console.warn("⚠️ Invalid JSON:", message);
         return;
       }
       const { id, name, fields } = payload;
@@ -42,7 +55,7 @@ export default function App() {
         ? fields[fields.length - 1]
         : {};
 
-      setDevices(old => {
+      setDevices((old) => {
         const prev = old[id]?.history || [];
         const history = [...prev, { time: new Date(), data: latest }].slice(-20);
         return {
@@ -56,14 +69,19 @@ export default function App() {
         };
       });
     });
-    return () => void socket.disconnect();
+
+    return () => {
+      socket.disconnect();
+      console.log("🔌 Socket disconnected");
+    };
   }, []);
 
   // Offline check
   useEffect(() => {
     const iv = setInterval(() => {
-      setDevices(old => {
-        const now = Date.now(), updated = {};
+      setDevices((old) => {
+        const now = Date.now();
+        const updated = {};
         Object.entries(old).forEach(([id, dev]) => {
           updated[id] = {
             ...dev,
@@ -79,7 +97,7 @@ export default function App() {
   // Summary counts
   const allIds = Object.keys(devices);
   const total = allIds.length;
-  const onlineCount = allIds.filter(id => devices[id].status === "online").length;
+  const onlineCount = allIds.filter((id) => devices[id].status === "online").length;
   const offlineCount = total - onlineCount;
 
   return (
@@ -107,7 +125,7 @@ export default function App() {
         {allIds.length === 0 && (
           <p style={styles.waiting}>Waiting for devices…</p>
         )}
-        {allIds.map(id => (
+        {allIds.map((id) => (
           <DeviceCard key={id} id={id} device={devices[id]} />
         ))}
       </div>
@@ -118,20 +136,22 @@ export default function App() {
 function DeviceCard({ id, device }) {
   const { name, history, lastSeen, status } = device;
   const metrics = ["ph", "temp", "cod", "ss"];
-  const labels = history.map(h => h.time.toLocaleTimeString());
+  const labels = history.map((h) => h.time.toLocaleTimeString());
   const datasets = metrics.map((key, i) => ({
     label: key.toUpperCase(),
-    data: history.map(h => h.data[key] ?? null),
+    data: history.map((h) => h.data[key] ?? null),
     fill: false,
     tension: 0.3,
     borderColor: ["#0f6", "#6cf", "#fc0", "#f6a"][i],
   }));
 
   return (
-    <div style={{
-      ...styles.card,
-      border: status === "online" ? "2px solid #0f6" : "2px solid #f66",
-    }}>
+    <div
+      style={{
+        ...styles.card,
+        border: status === "online" ? "2px solid #0f6" : "2px solid #f66",
+      }}
+    >
       <div style={styles.cardHeader}>
         <div style={styles.icon}>
           {ICON_MAP[id.split(/[:.]/)[0]] || <FaQuestionCircle />}
@@ -157,7 +177,7 @@ function DeviceCard({ id, device }) {
       </div>
 
       <div style={styles.values}>
-        {metrics.map(key => (
+        {metrics.map((key) => (
           <div key={key} style={styles.valueRow}>
             <div style={styles.valueIcon}>{ICON_MAP[key]}</div>
             <div style={styles.valueLabel}>{key.toUpperCase()}</div>
@@ -175,11 +195,13 @@ function DeviceCard({ id, device }) {
         <span style={{ opacity: 0.7, fontSize: 12 }}>
           Last: {lastSeen.toLocaleTimeString()}
         </span>
-        <span style={{
-          marginLeft: 8,
-          color: status === "online" ? "#0f6" : "#f66",
-          fontWeight: 600,
-        }}>
+        <span
+          style={{
+            marginLeft: 8,
+            color: status === "online" ? "#0f6" : "#f66",
+            fontWeight: 600,
+          }}
+        >
           {status === "online" ? <FaCheckCircle /> : <FaTimesCircle />}
         </span>
       </div>
@@ -213,16 +235,22 @@ const styles = {
   },
   summaryNumber: { display: "block", fontSize: 28, fontWeight: 700 },
   summaryNumberOnline: {
-    display: "block", fontSize: 28, fontWeight: 700, color: "#0f6"
+    display: "block",
+    fontSize: 28,
+    fontWeight: 700,
+    color: "#0f6",
   },
   summaryNumberOffline: {
-    display: "block", fontSize: 28, fontWeight: 700, color: "#f66"
+    display: "block",
+    fontSize: 28,
+    fontWeight: 700,
+    color: "#f66",
   },
 
   grid: {
     display: "flex",
     flexWrap: "wrap",
-    gap: 16,                // set space between cards
+    gap: 16, // set space between cards
     justifyContent: "flex-start",
   },
   waiting: {
