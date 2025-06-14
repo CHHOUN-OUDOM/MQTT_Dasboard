@@ -19,10 +19,10 @@ const SOCKET_URL = process.env.REACT_APP_SOCKET_URL;
 
 // Define sensors with icons and units
 const METRICS = [
-  { key: "ph",  icon: <FaTint />,             unit: ""    },
-  { key: "temp",icon: <FaThermometerHalf />,  unit: "°C"  },
-  { key: "cod", icon: <FaFlask />,            unit: "mg/L"},
-  { key: "ss",  icon: <FaCloud />,            unit: "g/L" },
+  { key: "ph",   icon: <FaTint />,            unit: "pH"   },
+  { key: "temp", icon: <FaThermometerHalf />, unit: "°C"   },
+  { key: "cod",  icon: <FaFlask />,           unit: "mg/L" },
+  { key: "ss",   icon: <FaCloud />,           unit: "g/L"  },
 ];
 
 export default function App() {
@@ -34,9 +34,7 @@ export default function App() {
 
     socket.on("mqtt_message", ({ message }) => {
       let payload;
-      try { payload = JSON.parse(message).payload; }
-      catch { return; }
-
+      try { payload = JSON.parse(message).payload; } catch { return; }
       const { id, name, fields } = payload;
       const latest = Array.isArray(fields) && fields.length
         ? fields[fields.length - 1]
@@ -90,16 +88,13 @@ export default function App() {
 
       <section style={styles.summary}>
         <div style={styles.summaryCard}>
-          <strong>{total}</strong>
-          <span>Total</span>
+          <strong>{total}</strong><span>Total</span>
         </div>
         <div style={styles.summaryCard}>
-          <strong style={{ color: "#4caf50" }}>{online}</strong>
-          <span>Online</span>
+          <strong style={{ color: "#4caf50" }}>{online}</strong><span>Online</span>
         </div>
         <div style={styles.summaryCard}>
-          <strong style={{ color: "#f44336" }}>{offline}</strong>
-          <span>Offline</span>
+          <strong style={{ color: "#f44336" }}>{offline}</strong><span>Offline</span>
         </div>
       </section>
 
@@ -135,7 +130,9 @@ function DeviceCard({ id, device }) {
       borderColor: status === "online" ? "#4caf50" : "#f44336"
     }}>
       <div style={styles.cardHeader}>
-        <div style={styles.icon}>{METRICS.find(m=>m.key===id.split(":")[0])?.icon||<FaQuestionCircle/>}</div>
+        <div style={styles.icon}>
+          {METRICS.find(m => m.key === id.split(":")[0])?.icon || <FaQuestionCircle />}
+        </div>
         <div>
           <h2 style={styles.deviceName}>{name}</h2>
           <p style={styles.deviceId}>{id}</p>
@@ -162,7 +159,7 @@ function DeviceCard({ id, device }) {
             <div style={styles.valueIcon}>{m.icon}</div>
             <div style={styles.valueLabel}>{m.key.toUpperCase()}</div>
             <div style={styles.valueData}>
-              {latest[m.key] ?? "--"}{m.unit}
+              {latest[m.key] != null ? `${latest[m.key]} ${m.unit}` : "--"}
             </div>
           </div>
         ))}
@@ -172,8 +169,8 @@ function DeviceCard({ id, device }) {
         <span>Last Seen: {lastSeen.toLocaleTimeString()}</span>
         <span style={{ marginLeft: 8 }}>
           {status === "online"
-            ? <FaCheckCircle color="#4caf50"/>
-            : <FaTimesCircle color="#f44336"/>
+            ? <FaCheckCircle color="#4caf50" />
+            : <FaTimesCircle color="#f44336" />
           }
         </span>
       </div>
@@ -182,37 +179,13 @@ function DeviceCard({ id, device }) {
 }
 
 const styles = {
-  app: {
-    fontFamily: "Roboto, sans-serif",
-    background: "linear-gradient(to right, #ece9e6, #ffffff)",
-    color: "#333",
-    minHeight: "100vh",
-    padding: "16px"
-  },
+  app: { fontFamily: "Roboto, sans-serif", background: "linear-gradient(to right, #ece9e6, #ffffff)", color: "#333", minHeight: "100vh", padding: "16px" },
   header: { textAlign: "center", marginBottom: "24px" },
   summary: { display: "flex", justifyContent: "center", gap: "16px", marginBottom: "32px" },
-  summaryCard: {
-    background: "#fff",
-    padding: "16px 24px",
-    borderRadius: "8px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-    textAlign: "center"
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: "24px"
-  },
+  summaryCard: { background: "#fff", padding: "16px 24px", borderRadius: "8px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", textAlign: "center" },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "24px" },
   waiting: { textAlign: "center", marginTop: "80px", color: "#777" },
-  card: {
-    background: "#fff",
-    border: "2px solid",
-    borderRadius: "8px",
-    boxShadow: "0 2px 12px rgba(0,0,0,0.1)",
-    display: "flex",
-    flexDirection: "column",
-    padding: "16px"
-  },
+  card: { background: "#fff", border: "2px solid", borderRadius: "8px", boxShadow: "0 2px 12px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", padding: "16px" },
   cardHeader: { display: "flex", alignItems: "center", marginBottom: "16px" },
   icon: { fontSize: "32px", marginRight: "12px" },
   deviceName: { margin: 0, fontSize: "18px" },
@@ -224,5 +197,5 @@ const styles = {
   valueLabel: { flex: 1, fontSize: "14px" },
   valueData: { fontWeight: "600", fontSize: "14px" },
   footer: { display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#555", marginTop: "auto" },
-  footerText: { textAlign: "center", marginTop: "40px", fontSize: "12px", color: "#999" },
+  footerText: { textAlign: "center", marginTop: "40px", fontSize: "12px", color: "#999" }
 };
