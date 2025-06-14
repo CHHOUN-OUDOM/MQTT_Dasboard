@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { io } from "socket.io-client";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
@@ -26,15 +26,27 @@ const METRICS = [
 ];
 
 export default function App() {
-  const [devices, setDevices] = useState({});
-  const [darkMode, setDarkMode] = useState(true);
+  // Persist theme choice in localStorage
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem("darkMode");
+    return saved === null ? true : saved === "true";
+  });
+  useEffect(() => {
+    localStorage.setItem("darkMode", darkMode);
+  }, [darkMode]);
 
-  // Subscribe to MQTT messages
+  const [devices, setDevices] = useState({});
+
+  // Subscribe to MQTT messages via Socket.IO proxy
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ["websocket"] });
     socket.on("mqtt_message", ({ message }) => {
       let payload;
-      try { payload = JSON.parse(message).payload; } catch { return; }
+      try {
+        payload = JSON.parse(message).payload;
+      } catch {
+        return;
+      }
       const { id, name, fields } = payload;
       const latest = Array.isArray(fields) && fields.length ? fields[fields.length - 1] : {};
 
@@ -42,7 +54,15 @@ export default function App() {
         const prevHistory = prev[id]?.history || [];
         const entry = { time: new Date(latest.timestamp * 1000), data: latest };
         const history = [...prevHistory, entry].slice(-20);
-        return { ...prev, [id]: { name, history, lastSeen: new Date(), status: "online" } };
+        return {
+          ...prev,
+          [id]: {
+            name,
+            history,
+            lastSeen: new Date(),
+            status: "online",
+          },
+        };
       });
     });
     return () => socket.disconnect();
@@ -55,7 +75,10 @@ export default function App() {
         const now = Date.now();
         const updated = {};
         Object.entries(prev).forEach(([id, dev]) => {
-          updated[id] = { ...dev, status: now - dev.lastSeen.getTime() > 30000 ? "offline" : "online" };
+          updated[id] = {
+            ...dev,
+            status: now - dev.lastSeen.getTime() > 30000 ? "offline" : "online",
+          };
         });
         return updated;
       });
@@ -64,13 +87,17 @@ export default function App() {
   }, []);
 
   const ids = Object.keys(devices);
-  const sortedIds = [...ids].sort((a, b) => {
-    const ga = a.split(":").slice(0,3).join(":"), gb = b.split(":").slice(0,3).join(":");
-    return ga === gb ? a.localeCompare(b) : ga.localeCompare(gb);
-  });
+  // Group and sort by OUI prefix then full MAC
+  const sortedIds = useMemo(() => {
+    return [...ids].sort((a, b) => {
+      const ga = a.split(":").slice(0, 3).join(":"),
+            gb = b.split(":").slice(0, 3).join(":");
+      return ga === gb ? a.localeCompare(b) : ga.localeCompare(gb);
+    });
+  }, [ids]);
 
-  const total = ids.length;
-  const online = ids.filter(id => devices[id].status === "online").length;
+  const total   = ids.length;
+  const online  = ids.filter(id => devices[id].status === "online").length;
   const offline = total - online;
 
   return (
@@ -81,63 +108,151 @@ export default function App() {
         </h1>
         <button
           style={darkMode ? styles.themeButtonDark : styles.themeButtonLight}
-          onClick={() => setDarkMode(!darkMode)}
+          onClick={() => setDarkMode(prev => !prev)}
+          aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
         >
           {darkMode ? "Light Mode" : "Dark Mode"}
         </button>
       </header>
 
       <section style={styles.summary}>
-        <div style={{ ...styles.summaryCard, background: darkMode ? "#2a2d36" : "#fff", color: darkMode ? "#fff" : "#333" }}>
-          <span style={styles.summaryNumber}>{total}</span>
-          <span style={styles.summaryLabel}>Total Devices</span>
-        </div>
-        <div style={{ ...styles.summaryCard, background: darkMode ? "#2a2d36" : "#fff", color: darkMode ? "#fff" : "#333" }}>
-          <span style={{ ...styles.summaryNumber, color: "#4caf50" }}>{online}</span>
-          <span style={styles.summaryLabel}>Online</span>
-        </div>
-        <div style={{ ...styles.summaryCard, background: darkMode ? "#2a2d36" : "#fff", color: darkMode ? "#fff" : "#333" }}>
-          <span style={{ ...styles.summaryNumber, color: "#f44336" }}>{offline}</span>
-          <span style={styles.summaryLabel}>Offline</span>
-        </div>
+        <SummaryCard
+          label="Total Devices"
+          value={total}
+          darkMode={darkMode}
+        />
+        <SummaryCard
+          label="Online"
+          value={online}
+          valueColor="#4caf50"
+          darkMode={darkMode}
+        />
+        <SummaryCard
+          label="Offline"
+          value={offline}
+          valueColor="#f44336"
+          darkMode={darkMode}
+        />
       </section>
 
       <main style={styles.grid}>
-        {sortedIds.length === 0
-          ? <p style={{ ...styles.waiting, color: darkMode ? "#aaa" : "#777" }}>Waiting for devices…</p>
-          : sortedIds.map(id => <DeviceCard key={id} id={id} device={devices[id]} darkMode={darkMode} />)
-        }
+        {sortedIds.length === 0 ? (
+          <p style={{ ...styles.waiting, color: darkMode ? "#aaa" : "#777" }}>
+            Waiting for devices…
+          </p>
+        ) : (
+          sortedIds.map(id => (
+            <DeviceCard
+              key={id}
+              id={id}
+              device={devices[id]}
+              darkMode={darkMode}
+            />
+          ))
+        )}
       </main>
 
-      <footer style={styles.footerText}>&copy; {new Date().getFullYear()} ROCKSTAR Modern Control. All rights reserved.</footer>
+      <footer style={styles.footerText}>
+        &copy; {new Date().getFullYear()} ROCKSTAR Modern Control. All rights reserved.
+      </footer>
     </div>
   );
 }
 
-function DeviceCard({ id, device, darkMode }) {
+// Small reusable summary card component
+function SummaryCard({ label, value, valueColor, darkMode }) {
+  return (
+    <div
+      style={{
+        ...styles.summaryCard,
+        background: darkMode ? "#2a2d36" : "#fff",
+        color: darkMode ? "#fff" : "#333",
+      }}
+    >
+      <span style={{
+        ...styles.summaryNumber,
+        color: valueColor ?? (darkMode ? "#fff" : "#333"),
+      }}>
+        {value}
+      </span>
+      <span style={styles.summaryLabel}>{label}</span>
+    </div>
+  );
+}
+
+// DeviceCard wrapped with React.memo for performance
+const DeviceCard = React.memo(function DeviceCard({ id, device, darkMode }) {
   const { name, history, lastSeen, status } = device;
   const labels = history.map(h => h.time.toLocaleTimeString());
-  const datasets = METRICS.map((m, i) => ({ label: m.key.toUpperCase(), data: history.map(h => h.data[m.key] ?? null), fill: false, tension: 0.3, borderColor: ["#2196f3","#ff9800","#9c27b0","#00bcd4"][i] }));
+  const datasets = METRICS.map((m, i) => ({
+    label: m.key.toUpperCase(),
+    data: history.map(h => h.data[m.key] ?? null),
+    fill: false,
+    tension: 0.3,
+    borderColor: ["#2196f3", "#ff9800", "#9c27b0", "#00bcd4"][i],
+  }));
   const latest = history[history.length - 1]?.data || {};
   const latestTime = history[history.length - 1]?.time;
 
   return (
-    <div style={{ ...styles.card, background: darkMode ? "#2a2d36" : "#fff", color: darkMode ? "#fff" : "#333", borderColor: status === "online" ? "#4caf50" : "#f44336" }}>
+    <div
+      style={{
+        ...styles.card,
+        background: darkMode ? "#2a2d36" : "#fff",
+        color: darkMode ? "#fff" : "#333",
+        borderColor: status === "online" ? "#4caf50" : "#f44336",
+      }}
+    >
       <div style={styles.cardHeader}>
-        <div style={styles.icon}>{METRICS.find(m => m.key === id.split(":")[0])?.icon || <FaQuestionCircle/>}</div>
+        <div style={styles.icon}>
+          {METRICS.find(m => m.key === id.split(":")[0])?.icon || <FaQuestionCircle />}
+        </div>
         <div>
           <h2 style={styles.deviceName}>{name}</h2>
           <p style={styles.deviceId}>{id}</p>
         </div>
       </div>
 
-      {latestTime && <p style={{ ...styles.sensorTimestamp, color: darkMode ? "#ccc" : "#555" }}>{latestTime.toLocaleDateString()} {latestTime.toLocaleTimeString()}</p>}
-      <div style={styles.chart}><Line data={{ labels, datasets }} options={{ maintainAspectRatio: false, plugins: { legend: { position: "bottom" } }, scales: { x: { display: false }, y: { beginAtZero: true } } }} /></div>
-      <div style={styles.values}>{METRICS.map(m => <div key={m.key} style={styles.valueRow}><div style={styles.valueIcon}>{m.icon}</div><div style={styles.valueLabel}>{m.key.toUpperCase()}</div><div style={styles.valueData}>{latest[m.key]!=null?`${latest[m.key]} ${m.unit}`:"--"}</div></div>)}</div>
-      <div style={styles.footer}><span style={{ color: darkMode ? "#ccc" : "#555" }}>Last Seen: {lastSeen.toLocaleTimeString()}</span><span style={{ marginLeft: 8 }}>{status==="online"?<FaCheckCircle color="#4caf50"/>:<FaTimesCircle color="#f44336"/>}</span></div>
+      {latestTime && (
+        <p style={{ ...styles.sensorTimestamp, color: darkMode ? "#ccc" : "#555" }}>
+          {latestTime.toLocaleDateString()} {latestTime.toLocaleTimeString()}
+        </p>
+      )}
+
+      <div style={styles.chart}>
+        <Line
+          data={{ labels, datasets }}
+          options={{
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "bottom" } },
+            scales: { x: { display: false }, y: { beginAtZero: true } },
+          }}
+        />
+      </div>
+
+      <div style={styles.values}>
+        {METRICS.map(m => (
+          <div key={m.key} style={styles.valueRow}>
+            <div style={styles.valueIcon}>{m.icon}</div>
+            <div style={styles.valueLabel}>{m.key.toUpperCase()}</div>
+            <div style={styles.valueData}>
+              {latest[m.key] != null ? `${latest[m.key]} ${m.unit}` : "--"}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={styles.footer}>
+        <span style={{ color: darkMode ? "#ccc" : "#555" }}>
+          Last Seen: {lastSeen.toLocaleTimeString()}
+        </span>
+        <span style={{ marginLeft: 8 }}>
+          {status === "online" ? <FaCheckCircle color="#4caf50" /> : <FaTimesCircle color="#f44336" />}
+        </span>
+      </div>
     </div>
   );
-}
+});
 
 const styles = {
   appDark:   { fontFamily: "Roboto, sans-serif", background: "#181f2a", minHeight: "100vh", padding: "16px" },
