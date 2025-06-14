@@ -14,10 +14,10 @@ import {
   FaTimesCircle,
 } from "react-icons/fa";
 
-// Read socket URL from environment
+// Use your env var
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL;
 
-// Icons per sensor key
+// Sensor icons
 const ICON_MAP = {
   ph: <FaTint />,
   temp: <FaThermometerHalf />,
@@ -28,6 +28,7 @@ const ICON_MAP = {
 export default function App() {
   const [devices, setDevices] = useState({});
 
+  // Socket.IO → MQTT proxy
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ["websocket"] });
 
@@ -35,15 +36,18 @@ export default function App() {
       let payload;
       try { payload = JSON.parse(message).payload; } catch { return; }
       const { id, name, fields } = payload;
-      const latest = Array.isArray(fields) && fields.length ? fields[fields.length - 1] : {};
+      const latest = fields?.length ? fields[fields.length - 1] : {};
 
-      setDevices(old => {
-        const prev = old[id]?.history || [];
-        const entry = { time: new Date(latest.timestamp * 1000), data: latest };
-        const history = [...prev, entry].slice(-20);
+      setDevices(prev => {
+        const history = [...(prev[id]?.history || []), latest].slice(-20);
         return {
-          ...old,
-          [id]: { name, history, lastSeen: new Date(), status: "online" }
+          ...prev,
+          [id]: {
+            name,
+            history,
+            lastSeen: new Date(),
+            status: "online",
+          },
         };
       });
     });
@@ -51,22 +55,23 @@ export default function App() {
     return () => socket.disconnect();
   }, []);
 
-  // Offline detection
+  // Offline check
   useEffect(() => {
-    const timer = setInterval(() => {
-      setDevices(old => {
-        const now = Date.now();
-        const updated = {};
-        Object.entries(old).forEach(([id, dev]) => {
-          updated[id] = { ...dev, status: now - dev.lastSeen.getTime() > 30000 ? "offline" : "online" };
-        });
+    const tid = setInterval(() => {
+      setDevices(prev => {
+        const now = Date.now(), updated = {};
+        for (let [id, dev] of Object.entries(prev)) {
+          updated[id] = {
+            ...dev,
+            status: now - dev.lastSeen.getTime() > 30000 ? "offline" : "online",
+          };
+        }
         return updated;
       });
     }, 5000);
-    return () => clearInterval(timer);
+    return () => clearInterval(tid);
   }, []);
 
-  // Summary
   const ids = Object.keys(devices);
   const total = ids.length;
   const online = ids.filter(id => devices[id].status === "online").length;
@@ -79,18 +84,9 @@ export default function App() {
       </header>
 
       <section style={styles.summary}>
-        <div style={styles.summaryCard}>
-          <strong>{total}</strong>
-          <span>Total</span>
-        </div>
-        <div style={styles.summaryCard}>
-          <strong style={{ color: "#4caf50" }}>{online}</strong>
-          <span>Online</span>
-        </div>
-        <div style={styles.summaryCard}>
-          <strong style={{ color: "#f44336" }}>{offline}</strong>
-          <span>Offline</span>
-        </div>
+        <div style={styles.summaryCard}><strong>{total}</strong><span>Total</span></div>
+        <div style={styles.summaryCard}><strong style={{color:"#4caf50"}}>{online}</strong><span>Online</span></div>
+        <div style={styles.summaryCard}><strong style={{color:"#f44336"}}>{offline}</strong><span>Offline</span></div>
       </section>
 
       <main style={styles.grid}>
@@ -105,21 +101,24 @@ export default function App() {
 
 function DeviceCard({ id, device }) {
   const { name, history, lastSeen, status } = device;
-  const metrics = ["ph", "temp", "cod", "ss"];
-  const labels = history.map(h => h.time.toLocaleTimeString());
-  const datasets = metrics.map((key, i) => ({
+  const metrics = ["ph","temp","cod","ss"];
+  const labels = history.map((_,i) => i+1);
+  const datasets = metrics.map((key,i) => ({
     label: key.toUpperCase(),
-    data: history.map(h => h.data[key] ?? null),
+    data: history.map(h => h[key] ?? null),
     fill: false,
     tension: 0.3,
-    borderColor: ["#2196f3", "#ff9800", "#9c27b0", "#00bcd4"][i],
+    borderColor: ["#2196f3","#ff9800","#9c27b0","#00bcd4"][i],
   }));
-  const latest = history[history.length - 1]?.data || {};
+  const latest = history[history.length-1]||{};
 
   return (
-    <div style={{ ...styles.card, borderColor: status === "online" ? "#4caf50" : "#f44336" }}>
+    <div style={{
+      ...styles.card,
+      borderColor: status==="online"?"#4caf50":"#f44336"
+    }}>
       <div style={styles.cardHeader}>
-        <div style={styles.icon}>{ICON_MAP[id.split(":")[0]] || <FaQuestionCircle />}</div>
+        <div style={styles.icon}>{ICON_MAP[id.split(":")[0]]||<FaQuestionCircle/>}</div>
         <div>
           <h2 style={styles.deviceName}>{name}</h2>
           <p style={styles.deviceId}>{id}</p>
@@ -128,54 +127,79 @@ function DeviceCard({ id, device }) {
 
       <div style={styles.chart}>
         <Line
-          data={{ labels, datasets }}
+          data={{labels,datasets}}
           options={{
-            maintainAspectRatio: false,
-            plugins: { legend: { position: "bottom" } },
-            scales: { x: { ticks: { maxTicksLimit: 4 } }, y: { beginAtZero: true } }
+            maintainAspectRatio:false,
+            plugins:{legend:{position:"bottom"}},
+            scales:{
+              x:{display:false},
+              y:{beginAtZero:true}
+            }
           }}
         />
       </div>
 
       <div style={styles.values}>
-        {metrics.map(key => (
+        {metrics.map(key=>(
           <div key={key} style={styles.valueRow}>
             <div style={styles.valueIcon}>{ICON_MAP[key]}</div>
             <div style={styles.valueLabel}>{key.toUpperCase()}</div>
-            <div style={styles.valueData}>{latest[key] ?? "--"}{key === "temp" && "°C"}</div>
+            <div style={styles.valueData}>{latest[key]??"--"}{key==="temp"&&"°C"}</div>
           </div>
         ))}
       </div>
 
       <div style={styles.footer}>
         <span>Last Seen: {lastSeen.toLocaleTimeString()}</span>
-        <span style={{ marginLeft: 8 }}>{status === "online" ? <FaCheckCircle color="#4caf50" /> : <FaTimesCircle color="#f44336" />}</span>
+        <span style={{marginLeft:8}}>
+          {status==="online" ? <FaCheckCircle color="#4caf50"/> : <FaTimesCircle color="#f44336"/>}
+        </span>
       </div>
     </div>
   );
 }
 
 const styles = {
-  app: { fontFamily: "Roboto, sans-serif", background: "#f5f5f5", color: "#333", minHeight: "100vh", padding: "16px" },
-  header: { textAlign: "center", marginBottom: "24px" },
-  summary: { display: "flex", justifyContent: "center", gap: "16px", marginBottom: "32px" },
-  summaryCard: { background: "#fff", padding: "16px 24px", borderRadius: "8px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", textAlign: "center" },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "24px" },
-  waiting: { textAlign: "center", marginTop: "80px", color: "#777" },
-
-  card: { background: "#fff", border: "2px solid", borderRadius: "8px", boxShadow: "0 2px 12px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", padding: "16px" },
-  cardHeader: { display: "flex", alignItems: "center", marginBottom: "16px" },
-  icon: { fontSize: "32px", marginRight: "12px" },
-  deviceName: { margin: 0, fontSize: "18px" },
-  deviceId: { margin: 0, fontSize: "12px", color: "#777" },
-
-  chart: { flex: 1, minHeight: "180px", marginBottom: "16px" },
-
-  values: { marginBottom: "16px" },
-  valueRow: { display: "flex", alignItems: "center", marginBottom: "8px" },
-  valueIcon: { width: "24px", textAlign: "center" },
-  valueLabel: { flex: 1, fontSize: "14px" },
-  valueData: { fontWeight: "600", fontSize: "14px" },
-
-  footer: { display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#555" },
+  app: {
+    fontFamily:"Roboto, sans-serif",
+    background:"#f5f5f5",
+    color:"#333",
+    minHeight:"100vh",
+    padding:"16px"
+  },
+  header: {textAlign:"center",marginBottom:"24px"},
+  summary:{display:"flex",justifyContent:"center",gap:"16px",marginBottom:"32px"},
+  summaryCard:{
+    background:"#fff",
+    padding:"16px 24px",
+    borderRadius:"8px",
+    boxShadow:"0 2px 8px rgba(0,0,0,0.1)",
+    textAlign:"center"
+  },
+  grid:{
+    display:"grid",
+    gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",
+    gap:"24px"
+  },
+  waiting:{textAlign:"center",marginTop:"80px",color:"#777"},
+  card:{
+    background:"#fff",
+    border:"2px solid",
+    borderRadius:"8px",
+    boxShadow:"0 2px 12px rgba(0,0,0,0.1)",
+    display:"flex",
+    flexDirection:"column",
+    padding:"16px"
+  },
+  cardHeader:{display:"flex",alignItems:"center",marginBottom:"16px"},
+  icon:{fontSize:"32px",marginRight:"12px"},
+  deviceName:{margin:0,fontSize:"18px"},
+  deviceId:{margin:0,fontSize:"12px",color:"#777"},
+  chart:{flex:1,minHeight:"150px",marginBottom:"16px"},
+  values:{marginBottom:"16px"},
+  valueRow:{display:"flex",alignItems:"center",marginBottom:"8px"},
+  valueIcon:{width:"24px",textAlign:"center"},
+  valueLabel:{flex:1,fontSize:"14px"},
+  valueData:{fontWeight:"600",fontSize:"14px"},
+  footer:{display:"flex",justifyContent:"space-between",fontSize:"12px",color:"#555"}
 };
