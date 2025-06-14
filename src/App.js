@@ -154,6 +154,7 @@ function DeviceCard({ id, device, darkMode }) {
     borderColor: ["#2196f3","#ff9800","#9c27b0","#00bcd4"][i],
   }));
   const latest = history[history.length - 1]?.data || {};
+  const latestTime = history[history.length - 1]?.time;
 
   return (
     <div style={{
@@ -172,14 +173,17 @@ function DeviceCard({ id, device, darkMode }) {
         </div>
       </div>
 
+      {/* Display sensor timestamp */}
+      {latestTime && (
+        <p style={{ ...styles.sensorTimestamp, color: darkMode ? "#ccc" : "#555" }}>
+          Data Time: {latestTime.toLocaleDateString()} {latestTime.toLocaleTimeString()}
+        </p>
+      )}
+
       <div style={styles.chart}>
         <Line
           data={{ labels, datasets }}
-          options={{
-            maintainAspectRatio: false,
-            plugins: { legend: { position: "bottom" } },
-            scales: { x: { display: false }, y: { beginAtZero: true } }
-          }}
+          options={{ maintainAspectRatio: false, plugins: { legend: { position: "bottom" } }, scales: { x: { display: false }, y: { beginAtZero: true } } }}
         />
       </div>
 
@@ -194,8 +198,12 @@ function DeviceCard({ id, device, darkMode }) {
       </div>
 
       <div style={styles.footer}>
-        <span>Last Seen: {lastSeen.toLocaleTimeString()}</span>
-        <span style={{ marginLeft: 8 }}>{status === "online" ? <FaCheckCircle color="#4caf50"/> : <FaTimesCircle color="#f44336"/>}</span>
+        <span style={{ color: darkMode ? "#ccc" : "#555" }}>
+          Last Seen: {lastSeen.toLocaleTimeString()}
+        </span>
+        <span style={{ marginLeft: 8 }}>
+          {status === "online" ? <FaCheckCircle color="#4caf50"/> : <FaTimesCircle color="#f44336"/>}
+        </span>
       </div>
     </div>
   );
@@ -217,6 +225,7 @@ const styles = {
   icon:{ fontSize: "32px", marginRight: "12px" },
   deviceName:{ margin: 0, fontSize: "18px" },
   deviceId:{ margin: 0, fontSize: "12px", color: "#777" },
+  sensorTimestamp:{ margin: "0 0 8px", fontSize: "12px" },
   chart:{ flex: 1, minHeight: "150px", marginBottom: "16px" },
   values:{ marginBottom: "16px" },
   valueRow:{ display: "flex", alignItems: "center", marginBottom: "8px" },
