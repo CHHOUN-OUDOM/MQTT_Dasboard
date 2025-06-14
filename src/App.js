@@ -36,9 +36,7 @@ export default function App() {
       let payload;
       try { payload = JSON.parse(message).payload; } catch { return; }
       const { id, name, fields } = payload;
-      const latest = Array.isArray(fields) && fields.length
-        ? fields[fields.length - 1]
-        : {};
+      const latest = Array.isArray(fields) && fields.length ? fields[fields.length - 1] : {};
 
       setDevices(prev => {
         const prevHistory = prev[id]?.history || [];
@@ -54,7 +52,8 @@ export default function App() {
   useEffect(() => {
     const timer = setInterval(() => {
       setDevices(prev => {
-        const now = Date.now(), updated = {};
+        const now = Date.now();
+        const updated = {};
         Object.entries(prev).forEach(([id, dev]) => {
           updated[id] = { ...dev, status: now - dev.lastSeen.getTime() > 30000 ? "offline" : "online" };
         });
@@ -70,8 +69,8 @@ export default function App() {
     return ga === gb ? a.localeCompare(b) : ga.localeCompare(gb);
   });
 
-  const total   = ids.length;
-  const online  = ids.filter(id => devices[id].status === "online").length;
+  const total = ids.length;
+  const online = ids.filter(id => devices[id].status === "online").length;
   const offline = total - online;
 
   return (
@@ -81,12 +80,7 @@ export default function App() {
           MQTT Devices Dashboard
         </h1>
         <button
-          style={{
-            ...styles.themeButton,
-            background: darkMode ? "#444" : "#eee",
-            color: darkMode ? "#fff" : "#333",
-            borderColor: darkMode ? "#888" : "#ccc"
-          }}
+          style={darkMode ? styles.themeButtonDark : styles.themeButtonLight}
           onClick={() => setDarkMode(!darkMode)}
         >
           {darkMode ? "Light Mode" : "Dark Mode"}
@@ -138,45 +132,39 @@ function DeviceCard({ id, device, darkMode }) {
       </div>
 
       {latestTime && <p style={{ ...styles.sensorTimestamp, color: darkMode ? "#ccc" : "#555" }}>{latestTime.toLocaleDateString()} {latestTime.toLocaleTimeString()}</p>}
-
-      <div style={styles.chart}>
-        <Line data={{ labels, datasets }} options={{ maintainAspectRatio: false, plugins: { legend: { position: "bottom" } }, scales: { x: { display: false }, y: { beginAtZero: true } } }} />
-      </div>
-
-      <div style={styles.values}>
-        {METRICS.map(m => <div key={m.key} style={styles.valueRow}><div style={styles.valueIcon}>{m.icon}</div><div style={styles.valueLabel}>{m.key.toUpperCase()}</div><div style={styles.valueData}>{latest[m.key] != null ? `${latest[m.key]} ${m.unit}` : "--"}</div></div>)}
-      </div>
-
-      <div style={styles.footer}><span style={{ color: darkMode ? "#ccc" : "#555" }}>Last Seen: {lastSeen.toLocaleTimeString()}</span><span style={{ marginLeft: 8 }}>{status === "online" ? <FaCheckCircle color="#4caf50"/> : <FaTimesCircle color="#f44336"/>}</span></div>
+      <div style={styles.chart}><Line data={{ labels, datasets }} options={{ maintainAspectRatio: false, plugins: { legend: { position: "bottom" } }, scales: { x: { display: false }, y: { beginAtZero: true } } }} /></div>
+      <div style={styles.values}>{METRICS.map(m => <div key={m.key} style={styles.valueRow}><div style={styles.valueIcon}>{m.icon}</div><div style={styles.valueLabel}>{m.key.toUpperCase()}</div><div style={styles.valueData}>{latest[m.key]!=null?`${latest[m.key]} ${m.unit}`:"--"}</div></div>)}</div>
+      <div style={styles.footer}><span style={{ color: darkMode ? "#ccc" : "#555" }}>Last Seen: {lastSeen.toLocaleTimeString()}</span><span style={{ marginLeft: 8 }}>{status==="online"?<FaCheckCircle color="#4caf50"/>:<FaTimesCircle color="#f44336"/>}</span></div>
     </div>
   );
 }
 
 const styles = {
-  appDark:  { fontFamily: "Roboto, sans-serif", background: "#181f2a", minHeight: "100vh", padding: "16px" },
-  appLight: { fontFamily: "Roboto, sans-serif", background: "#f5f5f5", minHeight: "100vh", padding: "16px" },
-  header:   { position: "relative", padding: "0 24px", height: "60px", display: "flex", alignItems: "center" },
-  titleDark:{ color: "#fff", margin: "0 auto", fontSize: "24px", fontWeight: 600 },
-  titleLight:{ color: "#333", margin: "0 auto", fontSize: "24px", fontWeight: 600 },
-  themeButton:{ position: "absolute", right: "24px", padding: "8px 12px", border: "1px solid", borderRadius: "4px", cursor: "pointer" },
-  summary:  { display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "12px", marginBottom: "32px" },
-  summaryCard:{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "12px 16px", borderRadius: "8px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", flex: "1 1 100px", maxWidth: "120px" },
+  appDark:   { fontFamily: "Roboto, sans-serif", background: "#181f2a", minHeight: "100vh", padding: "16px" },
+  appLight:  { fontFamily: "Roboto, sans-serif", background: "#f5f5f5", minHeight: "100vh", padding: "16px" },
+  header:    { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 16px", height: "60px" },
+  titleDark: { color: "#fff", fontSize: "24px", fontWeight: 600, margin: 0 },
+  titleLight:{ color: "#333", fontSize: "24px", fontWeight: 600, margin: 0 },
+  themeButtonDark: { padding: "8px 12px", background: "#444", color: "#fff", border: "1px solid #555", borderRadius: "4px" },
+  themeButtonLight:{ padding: "8px 12px", background: "#eee", color: "#333", border: "1px solid #ccc", borderRadius: "4px" },
+  summary:     { display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "12px", marginBottom: "32px" },
+  summaryCard: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "12px 16px", borderRadius: "8px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", flex: "1 1 100px", maxWidth: "120px" },
   summaryNumber:{ fontSize: "28px", fontWeight: 700, marginBottom: "4px" },
   summaryLabel:{ fontSize: "12px", opacity: 0.7, textTransform: "uppercase", textAlign: "center" },
-  grid:     { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "24px" },
-  waiting:  { textAlign: "center", marginTop: "80px" },
-  card:     { border: "2px solid", borderRadius: "8px", boxShadow: "0 2px 12px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", padding: "16px" },
-  cardHeader:{ display: "flex", alignItems: "center", marginBottom: "16px" },
-  icon:     { fontSize: "32px", marginRight: "12px" },
-  deviceName:{ margin: 0, fontSize: "18px" },
-  deviceId:  { margin: 0, fontSize: "12px", opacity: 0.7 },
+  grid:        { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "24px" },
+  waiting:     { textAlign: "center", marginTop: "80px" },
+  card:        { border: "2px solid", borderRadius: "8px", boxShadow: "0 2px 12px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", padding: "16px" },
+  cardHeader:  { display: "flex", alignItems: "center", marginBottom: "16px" },
+  icon:        { fontSize: "32px", marginRight: "12px" },
+  deviceName:  { margin: 0, fontSize: "18px" },
+  deviceId:    { margin: 0, fontSize: "12px", opacity: 0.7 },
   sensorTimestamp:{ margin: "0 0 8px", fontSize: "12px" },
-  chart:    { flex: 1, minHeight: "150px", marginBottom: "16px" },
-  values:   { marginBottom: "16px" },
-  valueRow: { display: "flex", alignItems: "center", marginBottom: "8px" },
-  valueIcon:{ width: "24px", textAlign: "center" },
-  valueLabel:{ flex: 1, fontSize: "14px" },
-  valueData:{ fontWeight: "600", fontSize: "14px" },
-  footer:   { display: "flex", justifyContent: "space-between", fontSize: "12px", marginTop: "auto" },
-  footerText:{ textAlign: "center", marginTop: "40px", fontSize: "12px", color: "#777" }
+  chart:       { flex: 1, minHeight: "150px", marginBottom: "16px" },
+  values:      { marginBottom: "16px" },
+  valueRow:    { display: "flex", alignItems: "center", marginBottom: "8px" },
+  valueIcon:   { width: "24px", textAlign: "center" },
+  valueLabel:  { flex: 1, fontSize: "14px" },
+  valueData:   { fontWeight: "600", fontSize: "14px" },
+  footer:      { display: "flex", justifyContent: "space-between", fontSize: "12px", marginTop: "auto" },
+  footerText:  { textAlign: "center", marginTop: "40px", fontSize: "12px", color: "#777" }
 };
