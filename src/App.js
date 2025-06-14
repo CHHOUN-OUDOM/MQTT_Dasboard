@@ -80,8 +80,16 @@ export default function App() {
   return (
     <div style={darkMode ? styles.appDark : styles.appLight}>
       <header style={styles.header}>
-        <h1>MQTT Devices Dashboard</h1>
-        <button style={styles.themeButton} onClick={() => setDarkMode(!darkMode)}>
+        <h1 style={darkMode ? styles.titleDark : styles.titleLight}>MQTT Devices Dashboard</h1>
+        <button
+          style={{
+            ...styles.themeButton,
+            background: darkMode ? "#333" : "#ddd",
+            color: darkMode ? "#fff" : "#333",
+            borderColor: darkMode ? "#fff" : "#333"
+          }}
+          onClick={() => setDarkMode(!darkMode)}
+        >
           {darkMode ? "Light Mode" : "Dark Mode"}
         </button>
       </header>
@@ -156,8 +164,10 @@ function DeviceCard({ id, device }) {
 const styles = {
   appDark: { fontFamily:"Roboto, sans-serif", background:"#181f2a", color:"#fff", minHeight:"100vh", padding:"16px" },
   appLight:{ fontFamily:"Roboto, sans-serif", background:"#f5f5f5", color:"#333", minHeight:"100vh", padding:"16px" },
-  header:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"24px" },
-  themeButton:{ padding:"8px 12px", border:"none", borderRadius:"4px", cursor:"pointer" },
+  header:{ position:"relative", padding:"0 24px", height:"60px", display:"flex", alignItems:"center" },
+  titleDark:{ color:"#fff", margin:"0 auto", fontSize:"24px" },
+  titleLight:{ color:"#333", margin:"0 auto", fontSize:"24px" },
+  themeButton:{ position:"absolute", right:"24px", padding:"8px 12px", border:"1px solid", borderRadius:"4px", cursor:"pointer" },
   summary:{ display:"flex", justifyContent:"center", gap:"16px", marginBottom:"32px" },
   summaryCard:{ background:"#fff", padding:"16px 24px", borderRadius:"8px", boxShadow:"0 2px 8px rgba(0,0,0,0.1)", textAlign:"center" },
   grid:{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:"24px" },
