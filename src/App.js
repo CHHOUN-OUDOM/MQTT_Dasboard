@@ -106,7 +106,7 @@ export default function App() {
       </main>
 
       <footer style={styles.footerText}>
-        &copy; {new Date().getFullYear()} Your Company Name. All rights reserved.
+        &copy; {new Date().getFullYear()} ROCKSTAR Modern Control. All rights reserved.
       </footer>
     </div>
   );
@@ -123,6 +123,7 @@ function DeviceCard({ id, device }) {
     borderColor: ["#2196f3","#ff9800","#9c27b0","#00bcd4"][i],
   }));
   const latest = history[history.length - 1]?.data || {};
+  const latestTime = history[history.length - 1]?.time;
 
   return (
     <div style={{
@@ -138,6 +139,13 @@ function DeviceCard({ id, device }) {
           <p style={styles.deviceId}>{id}</p>
         </div>
       </div>
+
+      {/* Display sensor timestamp */}
+      {latestTime && (
+        <p style={styles.sensorTimestamp}>
+          Data Time: {latestTime.toLocaleDateString()} {latestTime.toLocaleTimeString()}
+        </p>
+      )}
 
       <div style={styles.chart}>
         <Line
@@ -190,6 +198,7 @@ const styles = {
   icon: { fontSize: "32px", marginRight: "12px" },
   deviceName: { margin: 0, fontSize: "18px" },
   deviceId: { margin: 0, fontSize: "12px", color: "#777" },
+  sensorTimestamp: { margin: "0 0 8px", fontSize: "12px", color: "#555" },
   chart: { flex: 1, minHeight: "150px", marginBottom: "16px" },
   values: { marginBottom: "16px" },
   valueRow: { display: "flex", alignItems: "center", marginBottom: "8px" },
