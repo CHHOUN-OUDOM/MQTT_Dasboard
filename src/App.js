@@ -14,10 +14,10 @@ import {
   FaTimesCircle,
 } from "react-icons/fa";
 
-// Read from env (locally via .env.development, in Vercel settings)
+// Read socket URL from environment (set in .env.development or Vercel)
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL;
 
-// Icons for each sensor key
+// Icons per sensor key
 const ICON_MAP = {
   ph: <FaTint />,
   temp: <FaThermometerHalf />,
@@ -27,8 +27,8 @@ const ICON_MAP = {
 
 export default function App() {
   const [devices, setDevices] = useState({});
-  const [log, setLog] = useState([]);              // <-- global message log
 
+  // Subscribe to MQTT messages via proxy
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ["websocket"] });
 
@@ -44,36 +44,35 @@ export default function App() {
         ? fields[fields.length - 1]
         : {};
 
-      // 1) Update per-device history
+      // Record history and include original timestamp
       setDevices(old => {
-        const prev = old[id]?.history || [];
-        const history = [...prev, { time: new Date(), data: latest }].slice(-20);
+        const prevHistory = old[id]?.history || [];
+        const entry = {
+          time: new Date(latest.timestamp * 1000),  // use payload timestamp
+          data: latest
+        };
+        const history = [...prevHistory, entry].slice(-20);
         return {
           ...old,
           [id]: {
             name,
             history,
-            lastSeen: new Date(),
+            lastSeen: new Date(),  // last seen by proxy
             status: "online",
           },
         };
       });
-
-      // 2) Append to global log (keep last 200 entries)
-      setLog(old => [
-        { time: new Date(), id, name, data: latest },
-        ...old
-      ].slice(0, 200));
     });
 
     return () => socket.disconnect();
   }, []);
 
-  // offline check as before...
+  // Offline detection
   useEffect(() => {
-    const iv = setInterval(() => {
+    const interval = setInterval(() => {
       setDevices(old => {
-        const now = Date.now(), updated = {};
+        const now = Date.now();
+        const updated = {};
         Object.entries(old).forEach(([id, dev]) => {
           updated[id] = {
             ...dev,
@@ -83,13 +82,13 @@ export default function App() {
         return updated;
       });
     }, 5000);
-    return () => clearInterval(iv);
+    return () => clearInterval(interval);
   }, []);
 
-  // summary counts
-  const allIds = Object.keys(devices);
-  const total = allIds.length;
-  const onlineCount = allIds.filter(id => devices[id].status==="online").length;
+  // Summary counts
+  const ids = Object.keys(devices);
+  const total = ids.length;
+  const onlineCount = ids.filter(id => devices[id].status === "online").length;
   const offlineCount = total - onlineCount;
 
   return (
@@ -112,32 +111,12 @@ export default function App() {
         </div>
       </div>
 
-      {/* Device Cards */}
+      {/* Device Cards Grid */}
       <div style={styles.grid}>
-        {allIds.map(id => (
+        {ids.length === 0 && <p style={styles.waiting}>Waiting for devices…</p>}
+        {ids.map(id => (
           <DeviceCard key={id} id={id} device={devices[id]} />
         ))}
-        {!allIds.length && <p style={styles.waiting}>Waiting for devices…</p>}
-      </div>
-
-      {/* Global Message Log */}
-      <div style={styles.logContainer}>
-        <h2 style={styles.logHeader}>📜 All Messages</h2>
-        <div style={styles.logList}>
-          {log.map((entry, idx) => (
-            <div key={idx} style={styles.logItem}>
-              <span style={styles.logTime}>
-                {entry.time.toLocaleTimeString()}
-              </span>
-              <span style={styles.logId}>[{entry.id}]</span>
-              <span style={styles.logName}>{entry.name}:</span>
-              <code style={styles.logData}>
-                {JSON.stringify(entry.data)}
-              </code>
-            </div>
-          ))}
-          {!log.length && <p style={{ opacity: 0.6 }}>No messages yet…</p>}
-        </div>
       </div>
     </div>
   );
@@ -145,58 +124,78 @@ export default function App() {
 
 function DeviceCard({ id, device }) {
   const { name, history, lastSeen, status } = device;
-  const metrics = ["ph","temp","cod","ss"];
-  const labels = history.map(h => h.time.toLocaleTimeString());
-  const datasets = metrics.map((key,i)=>({
-    label:key.toUpperCase(),
-    data:history.map(h=>h.data[key]??null),
-    fill:false,tension:0.3,
-    borderColor:["#0f6","#6cf","#fc0","#f6a"][i]
+  const metrics = ["ph", "temp", "cod", "ss"];
+
+  // Chart labels: use payload timestamps
+  const labels = history.map(h => h.time.toLocaleString());
+  const datasets = metrics.map((key, i) => ({
+    label: key.toUpperCase(),
+    data: history.map(h => h.data[key] ?? null),
+    fill: false,
+    tension: 0.3,
+    borderColor: ["#0f6", "#6cf", "#fc0", "#f6a"][i],
   }));
+
+  // Latest entry for display
+  const latest = history[history.length - 1] || {};
+
   return (
     <div style={{
       ...styles.card,
-      border: status==="online" ? "2px solid #0f6" : "2px solid #f66",
+      border: status === "online" ? "2px solid #0f6" : "2px solid #f66",
     }}>
       <div style={styles.cardHeader}>
         <div style={styles.icon}>
-          {ICON_MAP[id.split(/[:.]/)[0]]||<FaQuestionCircle/>}
+          {ICON_MAP[id.split(/[:.]/)[0]] || <FaQuestionCircle />}
         </div>
         <div>
           <h3 style={styles.deviceName}>{name}</h3>
           <div style={styles.deviceId}>{id}</div>
         </div>
       </div>
+
+      {/* Chart of PH, Temp, COD, SS */}
       <div style={styles.chart}>
-        <Line data={{labels,datasets}}
+        <Line
+          data={{ labels, datasets }}
           options={{
-            responsive:true,
-            plugins:{legend:{position:"bottom",labels:{boxWidth:12}}},
-            scales:{x:{ticks:{maxTicksLimit:5}},y:{beginAtZero:true}}
-          }}/>
+            responsive: true,
+            plugins: { legend: { position: "bottom" } },
+            scales: {
+              x: { ticks: { maxTicksLimit: 5 } },
+              y: { beginAtZero: true },
+            },
+          }}
+        />
       </div>
+
+      {/* Latest values with payload timestamp */}
       <div style={styles.values}>
-        {metrics.map(key=>(
+        <div style={styles.timestamp}>
+          Data Time: {latest.time ? latest.time.toLocaleString() : "--"}
+        </div>
+        {metrics.map(key => (
           <div key={key} style={styles.valueRow}>
             <div style={styles.valueIcon}>{ICON_MAP[key]}</div>
             <div style={styles.valueLabel}>{key.toUpperCase()}</div>
             <div style={styles.valueData}>
-              {history.length ? history[history.length-1].data[key] : "--"}
-              {key==="temp"?"°C":""}
+              {latest.data?.[key] ?? "--"}
+              {key === "temp" ? "°C" : ""}
             </div>
           </div>
         ))}
       </div>
+
       <div style={styles.footer}>
-        <span style={{opacity:0.7,fontSize:12}}>
-          Last: {lastSeen.toLocaleTimeString()}
+        <span style={{ opacity: 0.7, fontSize: 12 }}>
+          Last Seen: {lastSeen.toLocaleTimeString()}
         </span>
         <span style={{
-          marginLeft:8,
-          color: status==="online"?"#0f6":"#f66",
-          fontWeight:600
+          marginLeft: 8,
+          color: status === "online" ? "#0f6" : "#f66",
+          fontWeight: 600,
         }}>
-          {status==="online"?<FaCheckCircle/>:<FaTimesCircle/>}
+          {status === "online" ? <FaCheckCircle /> : <FaTimesCircle />}
         </span>
       </div>
     </div>
@@ -204,39 +203,32 @@ function DeviceCard({ id, device }) {
 }
 
 const styles = {
-  app:{background:"#181f2a",color:"#fff",minHeight:"100vh",padding:16,fontFamily:"Poppins,sans-serif"},
-  header:{textAlign:"center",marginBottom:24},
+  app: { background: "#181f2a", color: "#fff", minHeight: "100vh", padding: 16, fontFamily: "Poppins, sans-serif" },
+  header: { textAlign: "center", marginBottom: 24 },
 
-  summary:{display:"flex",justifyContent:"center",gap:24,marginBottom:32},
-  summaryItem:{background:"#232f47",borderRadius:8,padding:"12px 20px",textAlign:"center",minWidth:100,boxShadow:"0 2px 8px rgba(0,0,0,0.2)"},
-  summaryNumber:{display:"block",fontSize:28,fontWeight:700},
-  summaryNumberOnline:{display:"block",fontSize:28,fontWeight:700,color:"#0f6"},
-  summaryNumberOffline:{display:"block",fontSize:28,fontWeight:700,color:"#f66"},
+  summary: { display: "flex", justifyContent: "center", gap: 24, marginBottom: 32 },
+  summaryItem: { background: "#232f47", borderRadius: 8, padding: "12px 20px", textAlign: "center", minWidth: 100, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" },
+  summaryNumber: { display: "block", fontSize: 28, fontWeight: 700 },
+  summaryNumberOnline: { display: "block", fontSize: 28, fontWeight: 700, color: "#0f6" },
+  summaryNumberOffline: { display: "block", fontSize: 28, fontWeight: 700, color: "#f66" },
 
-  grid:{display:"flex",flexWrap:"wrap",gap:16,justifyContent:"flex-start"},
-  waiting:{opacity:0.6,fontSize:18,marginTop:80,textAlign:"center",width:"100%"},
+  grid: { display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "flex-start" },
+  waiting: { opacity: 0.6, fontSize: 18, marginTop: 80, textAlign: "center", width: "100%" },
 
-  card:{background:"#232f47",borderRadius:12,width:300,margin:0,padding:16,boxShadow:"0 4px 12px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"},
-  cardHeader:{display:"flex",alignItems:"center",marginBottom:12},
-  icon:{fontSize:28,marginRight:8},
-  deviceName:{fontSize:18,margin:0},
-  deviceId:{fontSize:12,opacity:0.6},
+  card: { background: "#232f47", borderRadius: 12, width: 300, margin: 0, padding: 16, boxShadow: "0 4px 12px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column" },
+  cardHeader: { display: "flex", alignItems: "center", marginBottom: 12 },
+  icon: { fontSize: 28, marginRight: 8 },
+  deviceName: { fontSize: 18, margin: 0 },
+  deviceId: { fontSize: 12, opacity: 0.6 },
 
-  chart:{width:"100%",height:150,marginBottom:16},
-  values:{marginBottom:12},
-  valueRow:{display:"flex",alignItems:"center",margin:"6px 0"},
-  valueIcon:{width:24,textAlign:"center"},
-  valueLabel:{flex:1,fontSize:14},
-  valueData:{fontWeight:600,fontSize:14},
-  footer:{display:"flex",alignItems:"center",marginTop:"auto"},
+  chart: { width: "100%", height: 150, marginBottom: 16 },
 
-  // New log styles
-  logContainer:{marginTop:40},
-  logHeader:{fontSize:20,marginBottom:12,textAlign:"center"},
-  logList:{maxHeight:300,overflowY:"scroll",background:"#141d2a",padding:12,borderRadius:8},
-  logItem:{display:"flex",alignItems:"center",marginBottom:6,fontSize:14},
-  logTime:{opacity:0.6,marginRight:8},
-  logId:{fontWeight:600,marginRight:6},
-  logName:{marginRight:6},
-  logData:{background:"#232f47",padding:"2px 6px",borderRadius:4,fontSize:13,marginLeft:4}
+  values: { marginBottom: 12 },
+  timestamp: { marginBottom: 8, fontSize: 12, opacity: 0.7 },
+  valueRow: { display: "flex", alignItems: "center", margin: "6px 0" },
+  valueIcon: { width: 24, textAlign: "center" },
+  valueLabel: { flex: 1, fontSize: 14 },
+  valueData: { fontWeight: 600, fontSize: 14 },
+
+  footer: { display: "flex", alignItems: "center", marginTop: "auto" },
 };
